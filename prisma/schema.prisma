@@ -24,6 +24,7 @@ model User {
   address      Address?
   hostedVenues Venue[]     @relation("VenueHost")
   favourites   Favourite[]
+  bookings     Booking[]
 
   @@index([createdAt])
 }
@@ -68,6 +69,7 @@ model Venue {
   images        VenueImages[]
   venueFeatures VenueFeatures[]
   favouritedBy  Favourite[]
+  bookings      Booking[]
 
   @@index([hostId])
   @@index([pricePerNight])
@@ -117,4 +119,28 @@ model Favourite {
 
   @@id([userId, venueId])
   @@index([venueId])
+}
+
+model Booking {
+  id      Int   @id @default(autoincrement())
+  userId  Int
+  venueId Int
+  user    User  @relation(fields: [userId], references: [id], onDelete: Restrict, onUpdate: Cascade)
+  venue   Venue @relation(fields: [venueId], references: [id], onDelete: Restrict, onUpdate: Cascade)
+
+  startDate  DateTime
+  endDate    DateTime
+  totalPrice Decimal       @db.Decimal(10, 2)
+  status     BookingStatus @default(CONFIRMED)
+
+  createdAt DateTime @default(now())
+
+  @@index([userId])
+  @@index([venueId])
+  @@index([venueId, startDate])
+}
+
+enum BookingStatus {
+  CONFIRMED
+  CANCELLED
 }
