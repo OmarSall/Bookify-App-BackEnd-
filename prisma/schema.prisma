@@ -62,9 +62,10 @@ model Venue {
   host          User          @relation("VenueHost", fields: [hostId], references: [id])
   hostId        Int
 
-  createdAt DateTime      @default(now())
-  updatedAt DateTime      @updatedAt
-  images    VenueImages[]
+  createdAt     DateTime        @default(now())
+  updatedAt     DateTime        @updatedAt
+  images        VenueImages[]
+  VenueFeatures VenueFeatures[]
 
   @@index([hostId])
   @@index([pricePerNight])
@@ -82,4 +83,24 @@ model VenueImages {
   updatedAt DateTime @updatedAt
 
   @@index([venueId])
+}
+
+model Feature {
+  id            Int             @id @default(autoincrement())
+  name          String          @unique @db.Citext
+  createdAt     DateTime        @default(now())
+  updatedAt     DateTime        @updatedAt
+  venueFeatures VenueFeatures[]
+}
+
+model VenueFeatures {
+  venueId   Int
+  featureId Int
+  createdAt DateTime @default(now())
+
+  venue   Venue   @relation(fields: [venueId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+  feature Feature @relation(fields: [featureId], references: [id], onDelete: Restrict, onUpdate: Cascade)
+
+  @@id([venueId, featureId])
+  @@index([featureId])
 }
