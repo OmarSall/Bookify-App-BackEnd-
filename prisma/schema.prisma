@@ -14,15 +14,16 @@ datasource db {
 }
 
 model User {
-  id           Int      @id @default(autoincrement())
-  email        String   @unique @db.Citext
+  id           Int         @id @default(autoincrement())
+  email        String      @unique @db.Citext
   name         String
   password     String
   phoneNumber  String?
-  createdAt    DateTime @default(now())
-  updatedAt    DateTime @updatedAt
+  createdAt    DateTime    @default(now())
+  updatedAt    DateTime    @updatedAt
   address      Address?
-  hostedVenues Venue[]  @relation("VenueHost")
+  hostedVenues Venue[]     @relation("VenueHost")
+  favourites   Favourite[]
 
   @@index([createdAt])
 }
@@ -57,7 +58,7 @@ model Venue {
   capacity      Int
   latitude      Float?
   longitude     Float?
-  address       VenueAddress? @relation(fields: [addressId], references: [id])
+  address       VenueAddress? @relation(fields: [addressId], references: [id], onDelete: SetNull, onUpdate: Cascade)
   addressId     Int?          @unique
   host          User          @relation("VenueHost", fields: [hostId], references: [id])
   hostId        Int
@@ -65,7 +66,8 @@ model Venue {
   createdAt     DateTime        @default(now())
   updatedAt     DateTime        @updatedAt
   images        VenueImages[]
-  VenueFeatures VenueFeatures[]
+  venueFeatures VenueFeatures[]
+  favouritedBy  Favourite[]
 
   @@index([hostId])
   @@index([pricePerNight])
@@ -103,4 +105,16 @@ model VenueFeatures {
 
   @@id([venueId, featureId])
   @@index([featureId])
+}
+
+model Favourite {
+  userId    Int
+  venueId   Int
+  createdAt DateTime @default(now())
+
+  user  User  @relation(fields: [userId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+  venue Venue @relation(fields: [venueId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+
+  @@id([userId, venueId])
+  @@index([venueId])
 }
