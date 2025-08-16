@@ -13,23 +13,59 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
-model Address {
-  id      Int    @id @default(autoincrement())
-  street  String
-  city    String
-  country String
-  user    User?
+model User {
+  id           Int      @id @default(autoincrement())
+  email        String   @unique @db.Citext
+  name         String
+  password     String
+  phoneNumber  String?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+  address      Address?
+  hostedVenues Venue[]  @relation("VenueHost")
+
+  @@index([createdAt])
 }
 
-model User {
-  id          Int      @id @default(autoincrement())
-  email       String   @unique
-  name        String
-  password    String
-  phoneNumber String?
-  address     Address? @relation(fields: [addressId], references: [id])
-  addressId   Int?     @unique
+model Address {
+  userId    Int      @id
+  street    String
+  city      String
+  country   String   @db.Char(2)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+}
+
+model VenueAddress {
+  id        Int      @id @default(autoincrement())
+  street    String
+  city      String
+  country   String   @db.Char(2)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  venue     Venue?
+}
+
+model Venue {
+  id            Int           @id @default(autoincrement())
+  title         String
+  slug          String        @unique
+  description   String
+  pricePerNight Decimal       @db.Decimal(10, 2)
+  capacity      Int
+  latitude      Float?
+  longitude     Float?
+  address       VenueAddress? @relation(fields: [addressId], references: [id])
+  addressId     Int?          @unique
+  host          User          @relation("VenueHost", fields: [hostId], references: [id])
+  hostId        Int
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
+
+  @@index([hostId])
+  @@index([pricePerNight])
+  @@index([capacity])
 }
