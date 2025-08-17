@@ -9,6 +9,14 @@ async function bootstrap() {
   const app = await NestFactory.create(AppModule);
   const config = app.get(ConfigService);
 
+  // Call Nest’s shutdown hooks on OS signals
+  app.enableShutdownHooks(['SIGINT', 'SIGTERM']);
+
+  // Also close when Node’s event loop is about to exit
+  process.on('beforeExit', async () => {
+    await app.close();
+  });
+
   // Parse cookies for reading the JWT cookie
   app.use(cookieParser());
 
@@ -41,9 +49,10 @@ async function bootstrap() {
     origin: (origin, callback) => {
       if (!origin)
         return callback(null, true);          // allow non-browser clients
-      if (allowed.includes(origin))
+      const incoming = normalize(origin);
+      if (allowed.includes(incoming))
         return callback(null, true);
-      return callback(new Error(`CORS blocked for origin: ${origin}`));
+      return callback(null, false);
     },
     credentials: true, // allow cookies/Authorization headers
   });
