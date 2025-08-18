@@ -19,5 +19,12 @@
     "joi": "^18.0.0",
     "passport": "^0.7.0",
     "passport-jwt": "^4.0.1"
+  },
+  "scripts": {
+    "start": "nest start",
+    "start:dev": "nest start --watch",
+    "prisma:generate": "prisma generate",
+    "prisma:migrate": "prisma migrate dev --name init",
+    "prisma:deploy": "prisma migrate deploy"
   }
 }
