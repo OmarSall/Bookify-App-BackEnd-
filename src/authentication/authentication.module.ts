@@ -16,11 +16,17 @@ import { JwtStrategy } from './jwt.strategy';
       inject: [ConfigService],
       useFactory: async (config: ConfigService) => ({
         secret: config.get<string>('JWT_SECRET'),
-        signOptions: { expiresIn: config.get<number>('JWT_EXPIRATION_TIME') },
+        signOptions: {
+          expiresIn: config.get<number>('JWT_EXPIRATION_TIME'),
+          issuer: config.get<string>('JWT_ISSUER') || undefined,
+          audience: config.get<string>('JWT_AUDIENCE') || undefined,
+          algorithm: 'HS256',
+        },
       }),
     }),
   ],
   providers: [AuthenticationService, JwtStrategy],
   controllers: [AuthenticationController],
 })
-export class AuthenticationModule {}
+export class AuthenticationModule {
+}

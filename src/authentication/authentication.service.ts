@@ -54,10 +54,24 @@ export class AuthenticationService {
   }
 
   async getAuthenticatedUser(data: LogInDto) {
-    const user = await this.getUserByEmail(data.email);
-    await this.verifyPassword(data.password, user.password);
-    return user;
+    const startedAt = Date.now();
+    try {
+      const user = await this.getUserByEmail(data.email);
+      await this.verifyPassword(data.password, user.password);
+      await this.ensureMinDelay(startedAt); // equalize fast success cases
+      return user;
+    } catch (err) {
+      // Map both "user not found" and "bad password" to the same 401,
+      // but first ensure minimum response time to make probing harder.
+      if (err instanceof NotFoundException || err instanceof WrongCredentialsException) {
+        await this.ensureMinDelay(startedAt);
+        throw new WrongCredentialsException();
+      }
+      throw err;
+    }
   }
+
+
 
   private cookieIsSecure() {
     // Read from env (string) to avoid loose truthy checks
@@ -88,4 +102,12 @@ export class AuthenticationService {
     }
     return cookie;
   }
+
+  private async ensureMinDelay(startedAt: number, minMs = 200) {
+    const elapsed = Date.now() - startedAt;
+    if (elapsed < minMs) {
+      await new Promise((r) => setTimeout(r, minMs - elapsed));
+    }
+  }
+
 }

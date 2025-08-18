@@ -9,10 +9,13 @@ import { JwtAuthenticationGuard } from './jwt-authentication.guard';
 import { RequestWithUser } from './request-with-user.interface';
 import { TransformPlainToInstance } from 'class-transformer';
 import { AuthenticationResponseDto } from './dto/authentication-response.dto';
+import { seconds, Throttle } from '@nestjs/throttler';
+
 
 @Controller('authentication')
 export class AuthenticationController {
-  constructor(private readonly auth: AuthenticationService) {}
+  constructor(private readonly auth: AuthenticationService) {
+  }
 
   @Post('sign-up')
   @TransformPlainToInstance(AuthenticationResponseDto)
@@ -22,6 +25,7 @@ export class AuthenticationController {
   }
 
   @HttpCode(200)
+  @Throttle({ default: { limit: 5, ttl: seconds(10) } })
   @Post('log-in')
   @TransformPlainToInstance(AuthenticationResponseDto)
   async logIn(

@@ -18,6 +18,10 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
         (req: Request) => req?.cookies?.Authentication,
       ]),
       secretOrKey: config.get<string>('JWT_SECRET'),
+      issuer: config.get<string>('JWT_ISSUER') || undefined,
+      audience: config.get<string>('JWT_AUDIENCE') || undefined,
+      ignoreExpiration: false,
+      algorithms: ['HS256'],
     });
   }
 
