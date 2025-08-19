@@ -41,13 +41,14 @@ model Address {
 }
 
 model VenueAddress {
-  id        Int      @id @default(autoincrement())
-  street    String
-  city      String
-  country   String   @db.Char(2)
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-  venue     Venue?
+  id         Int      @id @default(autoincrement())
+  street     String
+  city       String
+  country    String   @db.Char(2)
+  postalCode String?
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+  venue      Venue?
 }
 
 model Venue {
@@ -59,6 +60,8 @@ model Venue {
   capacity      Int
   latitude      Float?
   longitude     Float?
+  albumId       Int?
+  rating        Float?
   address       VenueAddress? @relation(fields: [addressId], references: [id], onDelete: SetNull, onUpdate: Cascade)
   addressId     Int?          @unique
   host          User          @relation("VenueHost", fields: [hostId], references: [id])
@@ -70,6 +73,7 @@ model Venue {
   venueFeatures VenueFeatures[]
   favouritedBy  Favourite[]
   bookings      Booking[]
+  details       VenueDetails?
 
   @@index([hostId])
   @@index([pricePerNight])
@@ -143,4 +147,19 @@ model Booking {
 enum BookingStatus {
   CONFIRMED
   CANCELLED
+}
+
+model VenueDetails {
+  id                         Int     @id @default(autoincrement())
+  venueId                    Int     @unique
+  numberOfReviews            Int     @default(0)
+  checkInHour                String?
+  checkOutHour               String?
+  distanceFromCityCenterInKM Int?
+  sleepingMaxCapacity        Int?
+  sleepingBeds               Int?
+  contactEmail               String?
+  contactPhone               String?
+
+  venue Venue @relation(fields: [venueId], references: [id], onDelete: Cascade, onUpdate: Cascade)
 }
