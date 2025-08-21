@@ -6,6 +6,8 @@ import * as Joi from 'joi';
 import { AuthenticationModule } from './authentication/authentication.module';
 import { UsersModule } from './users/users.module';
 import { DatabaseModule } from './database/database.module';
+import { VenuesModule } from './venues/venues.module';
+import { BookingsModule } from './bookings/bookings.module';
 
 @Module({
   imports: [
@@ -34,6 +36,8 @@ import { DatabaseModule } from './database/database.module';
     DatabaseModule,
     UsersModule,
     AuthenticationModule,
+    VenuesModule,
+    BookingsModule,
   ],
   providers: [
     {
