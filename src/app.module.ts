@@ -8,6 +8,7 @@ import { UsersModule } from './users/users.module';
 import { DatabaseModule } from './database/database.module';
 import { VenuesModule } from './venues/venues.module';
 import { BookingsModule } from './bookings/bookings.module';
+import { FavouritesModule } from './favourites/favourites.module';
 
 @Module({
   imports: [
@@ -38,6 +39,7 @@ import { BookingsModule } from './bookings/bookings.module';
     AuthenticationModule,
     VenuesModule,
     BookingsModule,
+    FavouritesModule,
   ],
   providers: [
     {
@@ -45,4 +47,5 @@ import { BookingsModule } from './bookings/bookings.module';
     },
   ],
 })
-export class AppModule {}
+export class AppModule {
+}
