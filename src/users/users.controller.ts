@@ -4,7 +4,7 @@ import {
   Body,
   UseGuards,
   Req,
-  Delete,
+  Delete, HttpCode,
 } from '@nestjs/common';
 import { UsersService } from './users.service';
 import { JwtAuthenticationGuard } from '../authentication/jwt-authentication.guard';
@@ -15,7 +15,8 @@ import { UpdatePhoneDto } from './dto/update-phone.dto';
 
 @Controller('users')
 export class UsersController {
-  constructor(private readonly usersService: UsersService) {}
+  constructor(private readonly usersService: UsersService) {
+  }
 
   @Patch('update-phone')
   @UseGuards(JwtAuthenticationGuard)
@@ -29,10 +30,14 @@ export class UsersController {
 
   @Delete()
   @UseGuards(JwtAuthenticationGuard)
+  @HttpCode(204)
   async deleteSelf(@Req() req: RequestWithUser) {
-    await this.usersService.deleteUserCascadeVenuesAndCancelBookings(req.user.id);
-    // You can return 204 if you prefer:
-    // @HttpCode(204) and return void
-    return { deleted: true };
+    try {
+      console.log('[DELETE /users] req.user.id =', req.user.id); // <<< who are we deleting
+      await this.usersService.deleteUserCascadeVenuesAndCancelBookings(req.user.id);
+    } catch (error) {
+      console.error('DELETE /users failed:', error);
+      throw error;
+    }
   }
 }

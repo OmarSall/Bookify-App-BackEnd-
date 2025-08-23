@@ -105,55 +105,74 @@ export class UsersService {
    *  - Finally, delete the user (their Address/Favourite will be removed via cascade per your schema).
    */
   async deleteUserCascadeVenuesAndCancelBookings(userId: number): Promise<void> {
-    await this.prisma.$transaction(async (tx) => {
-      // 1) Ensure the user exists
-      const exists = await tx.user.findUnique({
-        where: {
-          id: userId,
-        },
-        select: {
-          id: true,
-        },
-      });
-      if (!exists) {
-        throw new NotFoundException('User not found');
-      }
-
-      // 2) Venues hosted by the user (collect id + addressId)
-      const venues = await tx.venue.findMany({
-        where: { hostId: userId },
-        select: { id: true, addressId: true },
-      });
-      const venueIds = venues.map(venue => venue.id);
-      const addressIds = venues.map(venue => venue.addressId).filter((x): x is number => x !== null);
-
-      // 3) Bookings FOR THESE VENUES -> CANCELLED, then DELETE (so venue deletion is not blocked by FK Restrict)
-      if (venueIds.length) {
-        await tx.booking.updateMany({
-          where: { venueId: { in: venueIds } },
-          data: { status: BookingStatus.CANCELLED },
+    try {
+      await this.prisma.$transaction(async (tx) => {
+        // 1) Ensure the user exists
+        const exists = await tx.user.findUnique({
+          where: {
+            id: userId,
+          },
+          select: {
+            id: true,
+          },
         });
-        await tx.booking.deleteMany({ where: { venueId: { in: venueIds } } });
-      }
+        if (!exists) {
+          throw new NotFoundException('User not found');
+        }
 
-      // 4) Delete venues hosted by the user
-      if (venueIds.length) {
-        await tx.venue.deleteMany({ where: { id: { in: venueIds } } });
-      }
+        // 2) Venues hosted by the user (collect id + addressId)
+        const venues = await tx.venue.findMany({
+          where: { hostId: userId },
+          select: { id: true, addressId: true },
+        });
+        const venueIds = venues.map(venue => venue.id);
+        const addressIds = venues.map(venue => venue.addressId).filter((x): x is number => x !== null);
 
-      // 5) Clean up orphaned VenueAddress records (Venue.address uses onDelete: SetNull; addressId is unique)
-      if (addressIds.length) {
-        await tx.venueAddress.deleteMany({ where: { id: { in: addressIds } } });
-      }
+        // 3) Bookings FOR THESE VENUES -> CANCELLED, then DELETE (so venue deletion is not blocked by FK Restrict)
+        if (venueIds.length) {
+          await tx.booking.updateMany({
+            where: { venueId: { in: venueIds } },
+            data: { status: BookingStatus.CANCELLED },
+          });
+          await tx.booking.deleteMany({ where: { venueId: { in: venueIds } } });
+        }
 
-      // 6) User's own bookings as a guest -> set status to CANCELLED (kept for history/analytics)
-      await tx.booking.updateMany({
-        where: { userId },
-        data: { status: BookingStatus.CANCELLED },
+        // 4) Delete venues hosted by the user
+        if (venueIds.length) {
+          await tx.venue.deleteMany({ where: { id: { in: venueIds } } });
+        }
+
+        // 5) Clean up orphaned VenueAddress records (Venue.address uses onDelete: SetNull; addressId is unique)
+        if (addressIds.length) {
+          await tx.venueAddress.deleteMany({ where: { id: { in: addressIds } } });
+        }
+
+        // 6) User's own bookings as a guest -> set status to CANCELLED (kept for history/analytics)
+        await tx.booking.updateMany({
+          where: { userId },
+          data: {
+            status: BookingStatus.CANCELLED,
+            userId: { set: null },
+          },
+        });
+
+        // 7) Remove user's favourites (if not ON DELETE CASCADE)
+        await tx.favourite.deleteMany({ where: { userId } });
+
+        // 8) Finally, delete the user
+        await tx.user.delete({ where: { id: userId } });
       });
-
-      // 7) Finally, delete the user (their Address/Favourite are removed via cascade per your schema)
-      await tx.user.delete({ where: { id: userId } });
-    });
+  } catch(error: any) {
+    if (error?.code === 'P2003') {
+      console.error('FK constraint failed (P2003) while deleting user:', {
+        message: error.message,
+        meta: error.meta,
+      });
+    } else {
+      console.error('Unexpected error while deleting user:', error);
+    }
+    throw error;
   }
+
+}
 }

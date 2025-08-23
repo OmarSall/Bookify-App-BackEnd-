@@ -127,9 +127,9 @@ model Favourite {
 
 model Booking {
   id      Int   @id @default(autoincrement())
-  userId  Int
+  userId  Int?
   venueId Int
-  user    User  @relation(fields: [userId], references: [id], onDelete: Restrict, onUpdate: Cascade)
+  user    User? @relation(fields: [userId], references: [id], onDelete: SetNull, onUpdate: Cascade)
   venue   Venue @relation(fields: [venueId], references: [id], onDelete: Restrict, onUpdate: Cascade)
 
   startDate  DateTime
