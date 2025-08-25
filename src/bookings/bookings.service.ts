@@ -67,19 +67,28 @@ export class BookingsService {
   }
 
   async updateDates(userId: number, id: number, dto: UpdateBookingDto) {
-    const bk = await this.prisma.booking.findUnique({ where: { id } });
-    if (!bk) throw new NotFoundException();
-    if (bk.userId !== userId) throw new ForbiddenException();
-
+    const booking = await this.prisma.booking.findUnique({ where: { id } });
+    if (!booking) {
+      throw new NotFoundException();
+    }
+    if (booking.userId !== userId) {
+      throw new ForbiddenException();
+    }
     const start = new Date(dto.startDate);
     const end = new Date(dto.endDate);
-    if (end <= start) throw new BadRequestException('endDate must be after startDate');
+    if (end <= start) {
+      throw new BadRequestException('endDate must be after startDate');
+    }
 
-    await this.ensureNoOverlap(bk.venueId, start, end, id);
+    await this.ensureNoOverlap(booking.venueId, start, end, id);
 
-    const venue = await this.prisma.venue.findUnique({ where: { id: bk.venueId }, select: { pricePerNight: true } });
-    const nights = this.nights(start, end);
-    const total = (nights * Number(venue!.pricePerNight)).toFixed(2);
+    const oldNights = this.nights(booking.startDate, booking.endDate);
+    if (oldNights <= 0) {
+      throw new BadRequestException('Corrupted booking dates');
+    }
+    const lockedPricePerNight = Number(booking.totalPrice) / oldNights;
+    const newNights = this.nights(start, end);
+    const total = Math.round((lockedPricePerNight * newNights));
 
     return this.prisma.booking.update({
       where: { id },
@@ -88,9 +97,13 @@ export class BookingsService {
   }
 
   async cancel(userId: number, id: number) {
-    const bk = await this.prisma.booking.findUnique({ where: { id } });
-    if (!bk) throw new NotFoundException();
-    if (bk.userId !== userId) throw new ForbiddenException();
+    const booking = await this.prisma.booking.findUnique({ where: { id } });
+    if (!booking) {
+      throw new NotFoundException();
+    }
+    if (booking.userId !== userId) {
+      throw new ForbiddenException();
+    }
     return this.prisma.booking.update({ where: { id }, data: { status: 'CANCELLED' } });
   }
 }
