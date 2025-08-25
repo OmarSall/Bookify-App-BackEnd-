@@ -1,10 +1,11 @@
 import { PrismaClient } from '@prisma/client';
 import { readFileSync } from 'fs';
+import bcrypt from 'bcryptjs';
+import * as crypto from 'crypto';
 
 const prisma = new PrismaClient();
 
-// Types reflect old db.json structure (front shape)
-type VenueJSON = {
+type VenueRow = {
   id: number;
   location: { postalCode: string; name: string };
   pricePerNightInEUR: number;
@@ -15,7 +16,7 @@ type VenueJSON = {
   features: string[];
 };
 
-type VenueDetailsJSON = VenueJSON & {
+type VenueDetailsRow = VenueRow & {
   venueId: number;
   numberOfReviews: number;
   description: string;
@@ -27,7 +28,38 @@ type VenueDetailsJSON = VenueJSON & {
   contactDetails: { phone: string; email: string };
 };
 
-type DB = { venues: VenueJSON[]; venuesDetails: VenueDetailsJSON[] };
+type DbDump = { venues: VenueRow[]; venuesDetails: VenueDetailsRow[] };
+
+const DB_PATH = 'prisma/db.json';
+const HOLDING_HOST_EMAIL = process.env.HOLDING_HOST_EMAIL ?? 'holding@bookify.local';
+const HOLDING_HOST_NAME = 'System Host';
+
+async function ensureHoldingHostId() {
+  const user = await prisma.user.upsert({
+    where: { email: HOLDING_HOST_EMAIL },
+    update: {},
+    create: {
+      email: HOLDING_HOST_EMAIL,
+      name: HOLDING_HOST_NAME,
+      password: await bcrypt.hash(crypto.randomBytes(32).toString('hex'), 10),
+      // OPTIONAL fields:
+      // role: 'ADMIN', // or 'SYSTEM'
+      // isActive: false,
+    },
+    select: { id: true },
+  });
+  return user.id;
+}
+
+function slugify(title: string, id: number) {
+  return `${title}-${id}`
+    .normalize('NFKD')
+    .replace(/[\u0300-\u036f]/g, '')   // strip diacritics
+    .toLowerCase()
+    .replace(/[^a-z0-9\- ]/g, '')
+    .trim()
+    .replace(/\s+/g, '-');
+}
 
 async function upsertFeature(name: string) {
   return prisma.feature.upsert({
@@ -37,148 +69,152 @@ async function upsertFeature(name: string) {
   });
 }
 
-async function main() {
-  const raw = readFileSync('prisma/db.json', 'utf-8');
-  const data: DB = JSON.parse(raw);
+async function buildFeatureMap(featureNames: string[]) {
+  const map = new Map<string, number>();
+  for (const name of featureNames) {
+    const feature = await upsertFeature(name);
+    map.set(feature.name, feature.id);
+  }
+  return map;
+}
 
-  // 1) Collect all features once
+async function ensureVenue(venue: VenueRow, hostId: number) {
+  await prisma.venue.upsert({
+    where: { id: venue.id },
+    update: {
+      title: venue.name,
+      slug: slugify(venue.name, venue.id),
+      description: 'Auto-imported',
+      pricePerNight: venue.pricePerNightInEUR.toFixed(2),
+      capacity: venue.capacity,
+      albumId: venue.albumId,
+      rating: venue.rating,
+      hostId,
+    },
+    create: {
+      id: venue.id,
+      title: venue.name,
+      slug: slugify(venue.name, venue.id),
+      description: 'Auto-imported',
+      pricePerNight: venue.pricePerNightInEUR.toFixed(2),
+      capacity: venue.capacity,
+      albumId: venue.albumId,
+      rating: venue.rating,
+      hostId,
+    },
+  });
+}
+
+async function ensureVenueAddress(venue: VenueRow) {
+  const currentVenue = await prisma.venue.findUnique({
+    where: { id: venue.id },
+    select: { addressId: true },
+  });
+
+  if (currentVenue?.addressId) {
+    await prisma.venueAddress.update({
+      where: { id: currentVenue.addressId },
+      data: {
+        street: '—',
+        city: venue.location.name,
+        country: 'PL',
+        postalCode: venue.location.postalCode,
+      },
+    });
+  } else {
+    const venueAddress = await prisma.venueAddress.create({
+      data: {
+        street: '—',
+        city: venue.location.name,
+        country: 'PL',
+        postalCode: venue.location.postalCode,
+      },
+      select: { id: true },
+    });
+    await prisma.venue.update({
+      where: { id: venue.id },
+      data: { addressId: venueAddress.id },
+    });
+  }
+}
+
+async function syncVenueFeatures(
+  venueId: number,
+  names: string[],
+  featureMap: Map<string, number>,
+) {
+  for (const name of names) {
+    const featureId = featureMap.get(name);
+    if (!featureId) {
+      continue;
+    }
+    await prisma.venueFeatures.upsert({
+      where: { venueId_featureId: { venueId, featureId } },
+      update: {},
+      create: { venueId, featureId },
+    });
+  }
+}
+
+async function upsertVenueDetails(detail: VenueDetailsRow) {
+  await prisma.venue.update({
+    where: { id: detail.venueId },
+    data: { description: detail.description },
+  });
+
+  await prisma.venueDetails.upsert({
+    where: { venueId: detail.venueId },
+    update: {
+      numberOfReviews: detail.numberOfReviews,
+      checkInHour: detail.checkInHour,
+      checkOutHour: detail.checkOutHour,
+      distanceFromCityCenterInKM: detail.distanceFromCityCenterInKM,
+      sleepingMaxCapacity: detail.sleepingDetails.maxCapacity,
+      sleepingBeds: detail.sleepingDetails.amountOfBeds,
+      contactEmail: detail.contactDetails.email,
+      contactPhone: detail.contactDetails.phone,
+    },
+    create: {
+      venueId: detail.venueId,
+      numberOfReviews: detail.numberOfReviews,
+      checkInHour: detail.checkInHour,
+      checkOutHour: detail.checkOutHour,
+      distanceFromCityCenterInKM: detail.distanceFromCityCenterInKM,
+      sleepingMaxCapacity: detail.sleepingDetails.maxCapacity,
+      sleepingBeds: detail.sleepingDetails.amountOfBeds,
+      contactEmail: detail.contactDetails.email,
+      contactPhone: detail.contactDetails.phone,
+    },
+  });
+}
+
+async function main() {
+  const holdingHostId = await ensureHoldingHostId();
+  const raw = readFileSync(DB_PATH, 'utf-8');
+  const data: DbDump = JSON.parse(raw);
+
   const allFeatureNames = Array.from(
-    new Set(
-      data.venues.flatMap((venue) => venue.features).concat(
-        data.venuesDetails.flatMap((venueDetail) => venueDetail.features ?? []),
-      ),
-    ),
+    new Set([
+      ...data.venues.flatMap((venueRow) => venueRow.features),
+      ...data.venuesDetails.flatMap((venueDetailsRow) => venueDetailsRow.features ?? []),
+    ]),
   );
 
-  const featureMap = new Map<string, number>();
-  for (const featureName of allFeatureNames) {
-    const feature = await upsertFeature(featureName);
-    featureMap.set(feature.name, feature.id);
-  }
+  const featureMap = await buildFeatureMap(allFeatureNames);
 
-  // 2) Upsert venues (keep original IDs!), then ensure address, then attach features
   for (const venue of data.venues) {
-    const venueId = venue.id;
-
-    // Unchecked upsert
-    await prisma.venue.upsert({
-      where: { id: venueId },
-      update: {
-        title: venue.name,
-        slug: `${venue.name}-${venue.id}`.toLowerCase().replace(/\s+/g, '-'),
-        description: 'Auto-imported',
-        pricePerNight: venue.pricePerNightInEUR.toFixed(2),
-        capacity: venue.capacity,
-        albumId: venue.albumId,
-        rating: venue.rating,
-        hostId: 1, // assumes user id=1 exists
-      },
-      create: {
-        id: venueId, // preserve original ID from db.json
-        title: venue.name,
-        slug: `${venue.name}-${venue.id}`.toLowerCase().replace(/\s+/g, '-'),
-        description: 'Auto-imported',
-        pricePerNight: venue.pricePerNightInEUR.toFixed(2),
-        capacity: venue.capacity,
-        albumId: venue.albumId,
-        rating: venue.rating,
-        hostId: 1, // connect by scalar FK in UncheckedCreateInput
-      },
-    });
-
-    // Ensure address
-    const current = await prisma.venue.findUnique({
-      where: { id: venueId },
-      select: { addressId: true },
-    });
-
-    if (current?.addressId) {
-      // Update existing address to match JSON
-      await prisma.venueAddress.update({
-        where: { id: current.addressId },
-        data: {
-          street: '—',
-          city: venue.location.name,
-          country: 'PL',
-          postalCode: venue.location.postalCode,
-        },
-      });
-    } else {
-      // Create address and wire it to venue
-      const addr = await prisma.venueAddress.create({
-        data: {
-          street: '—',
-          city: venue.location.name,
-          country: 'PL',
-          postalCode: venue.location.postalCode,
-        },
-        select: { id: true },
-      });
-      await prisma.venue.update({
-        where: { id: venueId },
-        data: { addressId: addr.id },
-      });
-    }
-
-    // Attach features from venue.features (idempotent)
-    for (const featureName of venue.features) {
-      const featureId = featureMap.get(featureName);
-      if (!featureId) continue;
-      await prisma.venueFeatures.upsert({
-        where: { venueId_featureId: { venueId, featureId } },
-        update: {},
-        create: { venueId, featureId },
-      });
-    }
+    await ensureVenue(venue, holdingHostId);
+    await ensureVenueAddress(venue);
+    await syncVenueFeatures(venue.id, venue.features, featureMap);
   }
 
-  // 3) Upsert details and merge any extra features from details
   for (const detail of data.venuesDetails) {
-    // Update description from details payload
-    await prisma.venue.update({
-      where: { id: detail.venueId },
-      data: { description: detail.description },
-    });
-
-    await prisma.venueDetails.upsert({
-      where: { venueId: detail.venueId },
-      update: {
-        numberOfReviews: detail.numberOfReviews,
-        checkInHour: detail.checkInHour,
-        checkOutHour: detail.checkOutHour,
-        distanceFromCityCenterInKM: detail.distanceFromCityCenterInKM,
-        sleepingMaxCapacity: detail.sleepingDetails.maxCapacity,
-        sleepingBeds: detail.sleepingDetails.amountOfBeds,
-        contactEmail: detail.contactDetails.email,
-        contactPhone: detail.contactDetails.phone,
-      },
-      create: {
-        venueId: detail.venueId,
-        numberOfReviews: detail.numberOfReviews,
-        checkInHour: detail.checkInHour,
-        checkOutHour: detail.checkOutHour,
-        distanceFromCityCenterInKM: detail.distanceFromCityCenterInKM,
-        sleepingMaxCapacity: detail.sleepingDetails.maxCapacity,
-        sleepingBeds: detail.sleepingDetails.amountOfBeds,
-        contactEmail: detail.contactDetails.email,
-        contactPhone: detail.contactDetails.phone,
-      },
-    });
-
-    // Extra tags from details.features (idempotent)
-    for (const featureName of detail.features ?? []) {
-      const featureId = featureMap.get(featureName);
-      if (!featureId) continue;
-      await prisma.venueFeatures.upsert({
-        where: { venueId_featureId: { venueId: detail.venueId, featureId } },
-        update: {},
-        create: { venueId: detail.venueId, featureId },
-      });
-    }
+    await upsertVenueDetails(detail);
+    await syncVenueFeatures(detail.venueId, detail.features ?? [], featureMap);
   }
 
-  console.log('✅ Imported db.json → normalized schema (with preserved IDs)');
-  console.log('ℹ️  Remember to reseed identity sequences if needed.');
+  console.log('✅ Imported db.json → normalized schema (preserved IDs)');
+  console.log('ℹ️ Reseed identity sequences if needed.');
 }
 
 main()

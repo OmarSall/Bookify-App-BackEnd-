@@ -33,7 +33,6 @@ export class UsersController {
   @HttpCode(204)
   async deleteSelf(@Req() req: RequestWithUser) {
     try {
-      console.log('[DELETE /users] req.user.id =', req.user.id); // <<< who are we deleting
       await this.usersService.deleteUserCascadeVenuesAndCancelBookings(req.user.id);
     } catch (error) {
       console.error('DELETE /users failed:', error);

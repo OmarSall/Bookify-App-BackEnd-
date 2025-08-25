@@ -4,7 +4,7 @@ ALTER TABLE "public"."Booking"
 
 -- Replace FK to support ON DELETE SET NULL
 ALTER TABLE "public"."Booking"
-DROP CONSTRAINT IF EXISTS "Booking_userId_fkey";
+    DROP CONSTRAINT IF EXISTS "Booking_userId_fkey";
 
 ALTER TABLE "public"."Booking"
     ADD CONSTRAINT "Booking_userId_fkey"

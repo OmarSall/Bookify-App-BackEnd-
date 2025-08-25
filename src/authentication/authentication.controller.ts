@@ -18,10 +18,11 @@ export class AuthenticationController {
   }
 
   @Post('sign-up')
+  @HttpCode(201)
   @TransformPlainToInstance(AuthenticationResponseDto)
   async signUp(@Body() data: SignUpDto) {
-    // Returns newly created user (password excluded by DTO)
-    return this.auth.signUp(data);
+    const user = await this.auth.signUp(data);
+    return { id: user.id, email: user.email };
   }
 
   @HttpCode(200)
