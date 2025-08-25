@@ -19,7 +19,6 @@ export class AuthenticationController {
 
   @Post('sign-up')
   @HttpCode(201)
-  @TransformPlainToInstance(AuthenticationResponseDto)
   async signUp(@Body() data: SignUpDto) {
     const user = await this.auth.signUp(data);
     return { id: user.id, email: user.email };
@@ -33,17 +32,15 @@ export class AuthenticationController {
     @Body() data: LogInDto,
     @Res({ passthrough: true }) res: Response,
   ) {
-    // Validate credentials, then set HttpOnly cookie with JWT
     const user = await this.auth.getAuthenticatedUser(data);
     const cookie = this.auth.getCookieWithJwtToken(user.id);
     res.setHeader('Set-Cookie', cookie);
     return user;
   }
 
-  @HttpCode(200)
+  @HttpCode(204)
   @Post('log-out')
   async logOut(@Res({ passthrough: true }) res: Response) {
-    // Clear the cookie
     res.setHeader('Set-Cookie', this.auth.getCookieForLogOut());
   }
 
@@ -51,7 +48,6 @@ export class AuthenticationController {
   @Get()
   @TransformPlainToInstance(AuthenticationResponseDto)
   authenticate(@Req() req: RequestWithUser) {
-    // If guard passes, req.user is available
     return req.user;
   }
 }
