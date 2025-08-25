@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Param, ParseIntPipe, Post, Req, Res, UseGuards } from '@nestjs/common';
+import { Body, Controller, Get, Param, ParseIntPipe, Post, Req, Res, UseGuards, Query } from '@nestjs/common';
 import { VenuesService } from './venues.service';
 import { JwtAuthenticationGuard } from '../authentication/jwt-authentication.guard';
 import { CreateVenueDto } from './dto/create-venue.dto';
@@ -8,9 +8,14 @@ export class VenuesController {
   constructor(private readonly venues: VenuesService) {
   }
 
+  @Get('locations')
+  getLocations() {
+    return this.venues.getAllLocations();
+  }
+
   @Get()
-  findAll() {
-    return this.venues.getList();
+  findAll(@Query('city') city?: string) {
+    return this.venues.getList({ city });
   }
 
   @Get(':id')
