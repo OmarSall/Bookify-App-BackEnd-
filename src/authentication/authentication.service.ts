@@ -68,7 +68,7 @@ export class AuthenticationService {
     }
   }
 
-  private cookieIsSecure() {
+  private isCookieSecure() {
     const secure = this.config.get<string>('COOKIE_SECURE') === 'true';
     const isProd = this.config.get<string>('NODE_ENV') === 'production';
     return secure || isProd;
@@ -81,7 +81,7 @@ export class AuthenticationService {
 
     let cookie = `Authentication=${token}; HttpOnly; Path=/; Max-Age=${maxAge}`;
 
-    if (this.cookieIsSecure()) {
+    if (this.isCookieSecure()) {
       cookie += `; Secure; SameSite=None`;
     }
     return cookie;
@@ -89,7 +89,7 @@ export class AuthenticationService {
 
   getCookieForLogOut() {
     let cookie = `Authentication=; HttpOnly; Path=/; Max-Age=0`;
-    if (this.cookieIsSecure()) {
+    if (this.isCookieSecure()) {
       cookie += `; Secure; SameSite=None`;
     }
     return cookie;
