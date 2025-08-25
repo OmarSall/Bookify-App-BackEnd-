@@ -18,7 +18,6 @@ export class AuthenticationService {
   }
 
   async signUp(data: SignUpDto) {
-    // Hash password before persisting
     const hash = await bcrypt.hash(data.password, 10);
     return this.users.create({
       name: data.name,
@@ -58,23 +57,18 @@ export class AuthenticationService {
     try {
       const user = await this.getUserByEmail(data.email);
       await this.verifyPassword(data.password, user.password);
-      await this.ensureMinDelay(startedAt); // equalize fast success cases
+      await this.ensureMinDelay(startedAt);
       return user;
-    } catch (err) {
-      // Map both "user not found" and "bad password" to the same 401,
-      // but first ensure minimum response time to make probing harder.
-      if (err instanceof NotFoundException || err instanceof WrongCredentialsException) {
+    } catch (error) {
+      if (error instanceof NotFoundException || error instanceof WrongCredentialsException) {
         await this.ensureMinDelay(startedAt);
         throw new WrongCredentialsException();
       }
-      throw err;
+      throw error;
     }
   }
 
-
-
   private cookieIsSecure() {
-    // Read from env (string) to avoid loose truthy checks
     const secure = this.config.get<string>('COOKIE_SECURE') === 'true';
     const isProd = this.config.get<string>('NODE_ENV') === 'production';
     return secure || isProd;
@@ -85,10 +79,8 @@ export class AuthenticationService {
     const token = this.jwt.sign(payload);
     const maxAge = this.config.get<number>('JWT_EXPIRATION_TIME');
 
-    // Base attributes
     let cookie = `Authentication=${token}; HttpOnly; Path=/; Max-Age=${maxAge}`;
 
-    // In cross-site scenarios under HTTPS, Secure+SameSite=None is required.
     if (this.cookieIsSecure()) {
       cookie += `; Secure; SameSite=None`;
     }
@@ -109,5 +101,4 @@ export class AuthenticationService {
       await new Promise((r) => setTimeout(r, minMs - elapsed));
     }
   }
-
 }
