@@ -11,12 +11,21 @@ type SafeUser = Omit<User, 'password'> &
       Address | null
   };
 
+const SAFE_USER_SELECT = {
+  id: true,
+  email: true,
+  name: true,
+  phoneNumber: true,
+  createdAt: true,
+  updatedAt: true,
+  address: true,
+} satisfies Prisma.UserSelect;
+
 @Injectable()
 export class UsersService {
   constructor(private readonly prisma: PrismaService) {
   }
 
-  // Find user by email (with address)
   async getByEmail(email: string) {
     const user = await this.prisma.user.findUnique({
       where: { email },
@@ -28,20 +37,10 @@ export class UsersService {
     return user;
   }
 
-  // Find user by id WITHOUT password; include address
   async getById(id: number): Promise<SafeUser> {
     const user = await this.prisma.user.findUnique({
       where: { id },
-      // omit password by selecting only needed fields
-      select: {
-        id: true,
-        email: true,
-        name: true,
-        phoneNumber: true,
-        createdAt: true,
-        updatedAt: true,
-        address: true,
-      },
+      select: SAFE_USER_SELECT,
     });
     if (!user) {
       throw new NotFoundException();
@@ -49,7 +48,6 @@ export class UsersService {
     return user;
   }
 
-  // Create a new user and return a SafeUser (without password)
   async create(user: UserDto): Promise<SafeUser> {
     try {
       return await this.prisma.user.create({
@@ -60,16 +58,7 @@ export class UsersService {
           phoneNumber: user.phoneNumber,
           address: user.address ? { create: user.address } : undefined,
         },
-        // select only safe fields in the response
-        select: {
-          id: true,
-          email: true,
-          name: true,
-          phoneNumber: true,
-          createdAt: true,
-          updatedAt: true,
-          address: true,
-        },
+        select: SAFE_USER_SELECT,
       });
     } catch (error) {
       if (error instanceof Prisma.PrismaClientKnownRequestError &&
@@ -84,30 +73,13 @@ export class UsersService {
     return this.prisma.user.update({
       where: { id: userId },
       data: { phoneNumber },
-      select: {
-        id: true,
-        email: true,
-        name: true,
-        phoneNumber: true,
-        createdAt: true,
-        updatedAt: true,
-        address: true,
-      },
+      select: SAFE_USER_SELECT,
     });
   }
 
-  /**
-   * Account deletion workflow:
-   *  - Collect venues hosted by the user.
-   *  - For bookings of those venues: UPDATE status -> CANCELLED, then DELETE (Booking.venue has FK Restrict).
-   *  - Delete the user's venues (+ clean up associated VenueAddress records).
-   *  - For the user's own bookings as a guest: UPDATE status -> CANCELLED (kept as history in DB).
-   *  - Finally, delete the user (their Address/Favourite will be removed via cascade per your schema).
-   */
   async deleteUserCascadeVenuesAndCancelBookings(userId: number): Promise<void> {
     try {
       await this.prisma.$transaction(async (tx) => {
-        // 1) Ensure the user exists
         const exists = await tx.user.findUnique({
           where: {
             id: userId,
@@ -120,7 +92,6 @@ export class UsersService {
           throw new NotFoundException('User not found');
         }
 
-        // 2) Venues hosted by the user (collect id + addressId)
         const venues = await tx.venue.findMany({
           where: { hostId: userId },
           select: { id: true, addressId: true },
@@ -128,7 +99,6 @@ export class UsersService {
         const venueIds = venues.map(venue => venue.id);
         const addressIds = venues.map(venue => venue.addressId).filter((x): x is number => x !== null);
 
-        // 3) Bookings FOR THESE VENUES -> CANCELLED, then DELETE (so venue deletion is not blocked by FK Restrict)
         if (venueIds.length) {
           await tx.booking.updateMany({
             where: { venueId: { in: venueIds } },
@@ -137,17 +107,14 @@ export class UsersService {
           await tx.booking.deleteMany({ where: { venueId: { in: venueIds } } });
         }
 
-        // 4) Delete venues hosted by the user
         if (venueIds.length) {
           await tx.venue.deleteMany({ where: { id: { in: venueIds } } });
         }
 
-        // 5) Clean up orphaned VenueAddress records (Venue.address uses onDelete: SetNull; addressId is unique)
         if (addressIds.length) {
           await tx.venueAddress.deleteMany({ where: { id: { in: addressIds } } });
         }
 
-        // 6) User's own bookings as a guest -> set status to CANCELLED (kept for history/analytics)
         await tx.booking.updateMany({
           where: { userId },
           data: {
@@ -156,23 +123,20 @@ export class UsersService {
           },
         });
 
-        // 7) Remove user's favourites (if not ON DELETE CASCADE)
         await tx.favourite.deleteMany({ where: { userId } });
 
-        // 8) Finally, delete the user
         await tx.user.delete({ where: { id: userId } });
       });
-  } catch(error: any) {
-    if (error?.code === 'P2003') {
-      console.error('FK constraint failed (P2003) while deleting user:', {
-        message: error.message,
-        meta: error.meta,
-      });
-    } else {
-      console.error('Unexpected error while deleting user:', error);
+    } catch (error: any) {
+      if (error?.code === 'P2003') {
+        console.error('FK constraint failed (P2003) while deleting user:', {
+          message: error.message,
+          meta: error.meta,
+        });
+      } else {
+        console.error('Unexpected error while deleting user:', error);
+      }
+      throw error;
     }
-    throw error;
   }
-
-}
 }
