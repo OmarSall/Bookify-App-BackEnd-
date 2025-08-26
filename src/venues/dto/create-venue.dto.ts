@@ -30,7 +30,7 @@ export class CreateVenueDto {
   @IsString() country!: string; // 'PL'
   @IsOptional() @IsString() postalCode?: string;
 
-  // features (nazwy)
+  // features
   @IsArray()
   @IsString({ each: true })
   features!: string[];

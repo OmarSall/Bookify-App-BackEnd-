@@ -18,10 +18,22 @@ export class VenuesController {
     @Query('city') city?: string,
     @Query('page') page?: string,
     @Query('perPage') perPage?: string,
+    @Query('priceMin') priceMin?: string,
+    @Query('priceMax') priceMax?: string,
     ) {
     const pageNum = Math.max(1, parseInt(page ?? '1', 10) || 1);
     const perPageNum = Math.min(60, Math.max(1, parseInt(perPage ?? '12', 10) || 12));
-    return this.venues.getList({ city, page: pageNum, perPage: perPageNum });
+
+    const min = priceMin !== undefined ? Number(priceMin) : undefined;
+    const max = priceMax !== undefined ? Number(priceMax) : undefined;
+
+    return this.venues.getList({
+      city,
+      page: pageNum,
+      perPage: perPageNum,
+      priceMin: Number.isFinite(min) ? min : undefined,
+      priceMax: Number.isFinite(max) ? max : undefined,
+    });
   }
 
   @Get(':id')

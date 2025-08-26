@@ -27,7 +27,7 @@ export class VenuesService {
         name: v.address?.city ?? null,
         postalCode: v.address?.postalCode ?? null,
       },
-      pricePerNightInEUR: price,
+      pricePerNight: price,
       rating: v.rating ?? null,
       capacity: v.capacity,
       albumId: v.albumId ?? null,
@@ -57,36 +57,51 @@ export class VenuesService {
     };
   }
 
-  async getList(params: { city?: string; page: number; perPage: number }) {
-    const { city, page, perPage } = params;
-    const trimmed = city?.trim();
+  async getList(params: {
+    city?: string;
+    page: number;
+    perPage: number;
+    priceMin?: number;
+    priceMax?: number;
+  }) {
+    const { city, page, perPage, priceMin, priceMax } = params;
 
-    const cityFilter: Prisma.StringFilter | undefined = trimmed
-      ? { contains: trimmed, mode: Prisma.QueryMode.insensitive }
-      : undefined;
+    const where: Prisma.VenueWhereInput = {};
 
-    const where: Prisma.VenueWhereInput | undefined = cityFilter
-      ? {
-        address: {
-          is: {
-            city: cityFilter,
+    const trimmedCity = city?.trim();
+    if (trimmedCity) {
+      where.address = {
+        is: {
+          city: {
+            contains: trimmedCity,
+            mode: Prisma.QueryMode.insensitive,
           },
         },
-      }
-      : undefined;
+      };
+    }
 
-    const [rows, totalCount] = await Promise.all([
+    if (priceMin !== undefined || priceMax !== undefined) {
+      where.pricePerNight = {};
+      if (priceMin !== undefined) {
+        (where.pricePerNight as Prisma.DecimalFilter).gte = priceMin;
+      }
+      if (priceMax !== undefined) {
+        (where.pricePerNight as Prisma.DecimalFilter).lte = priceMax;
+      }
+    }
+
+    const [totalCount, rows] = await this.prisma.$transaction([
+      this.prisma.venue.count({ where }),
       this.prisma.venue.findMany({
         where,
-        orderBy: { createdAt: 'desc' },
-        skip: (page - 1) * perPage,
-        take: perPage,
         include: {
           address: { select: { city: true, country: true, street: true, postalCode: true } },
           venueFeatures: { select: { feature: { select: { name: true } } } },
         },
+        orderBy: { createdAt: 'desc' },
+        skip: (page - 1) * perPage,
+        take: perPage,
       }),
-      this.prisma.venue.count({ where }),
     ]);
 
     const items = rows.map((v) => this.toCardDto(v));
@@ -124,7 +139,7 @@ export class VenuesService {
         title: dto.title,
         slug: slugify(`${dto.title}-${Date.now()}`, { lower: true }),
         description: dto.description,
-        pricePerNight: dto.pricePerNight.toFixed(2),
+        pricePerNight: dto.pricePerNight,
         capacity: dto.capacity,
         albumId: dto.albumId ?? null,
         rating: dto.rating ?? null,
