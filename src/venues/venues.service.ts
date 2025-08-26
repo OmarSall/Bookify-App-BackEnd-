@@ -2,6 +2,7 @@ import { Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../database/prisma.service';
 import slugify from 'slugify';
 import { CreateVenueDto } from './dto/create-venue.dto';
+import { Prisma } from '@prisma/client';
 
 @Injectable()
 export class VenuesService {
@@ -15,11 +16,13 @@ export class VenuesService {
         : Number(v.pricePerNight);
 
     const featureNames: string[] =
-      v.venueFeatures?.map((vf: any) => vf.feature.name) ?? [];
+      v.venueFeatures?.map((vf: any) => vf.feature.name).filter(Boolean) ?? [];
 
     return {
       id: v.id,
+      title: v.title,
       name: v.title,
+      address: v.address ? { city: v.address.city } : null,
       location: {
         name: v.address?.city ?? null,
         postalCode: v.address?.postalCode ?? null,
@@ -29,6 +32,7 @@ export class VenuesService {
       capacity: v.capacity,
       albumId: v.albumId ?? null,
       features: featureNames,
+      isFavourite: v.isFavourite ?? false,
     };
   }
 
@@ -53,31 +57,40 @@ export class VenuesService {
     };
   }
 
-  async getList(params?: { city?: string }) {
-    const city = params?.city?.trim();
+  async getList(params: { city?: string; page: number; perPage: number }) {
+    const { city, page, perPage } = params;
+    const trimmed = city?.trim();
 
-    const rows = await this.prisma.venue.findMany({
-      where: city
-        ? { address: { is: { city: { contains: city, mode: 'insensitive' } } } }
-        : undefined,
-      include: {
-        address: { select: { city: true, country: true, street: true, postalCode: true } },
-        // ↓ jeśli masz tabelę łączącą venueFeatures -> feature(name)
-        venueFeatures: { select: { feature: { select: { name: true } } } },
-        // ↑ a jeśli masz bezpośrednio: features: { select: { name: true } },
-      },
-      orderBy: { createdAt: 'desc' },
-    });
+    const cityFilter: Prisma.StringFilter | undefined = trimmed
+      ? { contains: trimmed, mode: Prisma.QueryMode.insensitive }
+      : undefined;
 
-    // spłaszcz features do string[]
-    return rows.map((v) => ({
-      ...v,
-      features: Array.isArray(v.venueFeatures)
-        ? v.venueFeatures.map((vf) => vf.feature.name)
-        : Array.isArray((v as any).features)
-          ? (v as any).features.map((f: any) => f.name)
-          : [],
-    }));
+    const where: Prisma.VenueWhereInput | undefined = cityFilter
+      ? {
+        address: {
+          is: {
+            city: cityFilter,
+          },
+        },
+      }
+      : undefined;
+
+    const [rows, totalCount] = await Promise.all([
+      this.prisma.venue.findMany({
+        where,
+        orderBy: { createdAt: 'desc' },
+        skip: (page - 1) * perPage,
+        take: perPage,
+        include: {
+          address: { select: { city: true, country: true, street: true, postalCode: true } },
+          venueFeatures: { select: { feature: { select: { name: true } } } },
+        },
+      }),
+      this.prisma.venue.count({ where }),
+    ]);
+
+    const items = rows.map((v) => this.toCardDto(v));
+    return { items, totalCount };
   }
 
   async getByIdWithDetails(id: number) {
@@ -158,8 +171,8 @@ export class VenuesService {
 
     const unique = new Set(
       venues
-        .map(v => (v.address?.city ?? "").trim())
-        .filter(Boolean)
+        .map(v => (v.address?.city ?? '').trim())
+        .filter(Boolean),
     );
 
     return Array.from(unique).sort((a, b) => a.localeCompare(b));

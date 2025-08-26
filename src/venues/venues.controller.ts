@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Param, ParseIntPipe, Post, Req, Res, UseGuards, Query } from '@nestjs/common';
+import { Body, Controller, Get, Param, ParseIntPipe, Post, Req, UseGuards, Query } from '@nestjs/common';
 import { VenuesService } from './venues.service';
 import { JwtAuthenticationGuard } from '../authentication/jwt-authentication.guard';
 import { CreateVenueDto } from './dto/create-venue.dto';
@@ -14,8 +14,14 @@ export class VenuesController {
   }
 
   @Get()
-  findAll(@Query('city') city?: string) {
-    return this.venues.getList({ city });
+  findAll(
+    @Query('city') city?: string,
+    @Query('page') page?: string,
+    @Query('perPage') perPage?: string,
+    ) {
+    const pageNum = Math.max(1, parseInt(page ?? '1', 10) || 1);
+    const perPageNum = Math.min(60, Math.max(1, parseInt(perPage ?? '12', 10) || 12));
+    return this.venues.getList({ city, page: pageNum, perPage: perPageNum });
   }
 
   @Get(':id')
