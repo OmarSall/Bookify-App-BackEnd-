@@ -24,6 +24,7 @@ export class VenuesController {
     @Query('sortDir') sortDir?: 'asc' | 'desc',
     @Query('features') featuresRaw?: string | string[],
     @Query('features[]') featuresBracket?: string[] | string,
+    @Query('type') type?: 'studio' | 'apartment' | 'house' | 'villa',
     ) {
     const pageNum = Math.max(1, parseInt(page ?? '1', 10) || 1);
     const perPageNum = Math.min(60, Math.max(1, parseInt(perPage ?? '12', 10) || 12));
@@ -52,6 +53,7 @@ export class VenuesController {
       sortBy,
       sortDir,
       features,
+      type,
     });
   }
 

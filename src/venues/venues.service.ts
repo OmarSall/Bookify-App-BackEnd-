@@ -4,6 +4,15 @@ import slugify from 'slugify';
 import { CreateVenueDto } from './dto/create-venue.dto';
 import { Prisma } from '@prisma/client';
 
+type VenueType = 'studio' | 'apartment' | 'house' | 'villa';
+
+const TYPE_CAPACITY_RULES: Record<VenueType, { gte?: number; lte?: number }> = {
+  studio:     { lte: 2 },
+  apartment:  { lte: 3 },
+  house:      { gte: 4, lte: 8 },
+  villa:      { gte: 9 },
+};
+
 @Injectable()
 export class VenuesService {
   constructor(private readonly prisma: PrismaService) {
@@ -66,8 +75,9 @@ export class VenuesService {
     sortBy?: 'price' | 'rating' | 'capacity' | 'createdAt' | 'title';
     sortDir?: 'asc' | 'desc';
     features?: string[];
+    type?: VenueType;
   }) {
-    const { city, page, perPage, priceMin, priceMax, sortBy, sortDir, features } = params;
+    const { city, page, perPage, priceMin, priceMax, sortBy, sortDir, features, type } = params;
 
     const andWhere: Prisma.VenueWhereInput[] = [];
 
@@ -105,6 +115,18 @@ export class VenuesService {
           },
         });
       }
+    }
+
+    if (type && TYPE_CAPACITY_RULES[type]) {
+      const rule = TYPE_CAPACITY_RULES[type];
+      const capacityFilter: Prisma.IntFilter = {};
+      if (rule.gte !== undefined) {
+        capacityFilter.gte = rule.gte;
+      }
+      if (rule.lte !== undefined) {
+        capacityFilter.lte = rule.lte;
+      }
+      andWhere.push({ capacity: capacityFilter });
     }
 
     const where: Prisma.VenueWhereInput = andWhere.length ? { AND: andWhere } : {};
