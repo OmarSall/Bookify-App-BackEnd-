@@ -30,6 +30,14 @@ export class FavouritesService {
     });
   }
 
+  async listMyVenueIds(userId: number): Promise<number[]> {
+    const rows = await this.prisma.favourite.findMany({
+      where: { userId },
+      select: { venueId: true },
+    });
+    return rows.map((row) => row.venueId);
+  }
+
   async add(userId: number, venueId: number) {
     await this.prisma.favourite.upsert({
       where: { userId_venueId: { userId, venueId } },

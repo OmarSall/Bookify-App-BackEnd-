@@ -9,50 +9,50 @@ export class VenuesService {
   constructor(private readonly prisma: PrismaService) {
   }
 
-  private toCardDto(v: any) {
+  private toCardDto(venue: any) {
     const price =
-      typeof v.pricePerNight === 'string'
-        ? Number(v.pricePerNight)
-        : Number(v.pricePerNight);
+      typeof venue.pricePerNight === 'string'
+        ? Number(venue.pricePerNight)
+        : Number(venue.pricePerNight);
 
     const featureNames: string[] =
-      v.venueFeatures?.map((vf: any) => vf.feature.name).filter(Boolean) ?? [];
+      venue.venueFeatures?.map((venueFeature: any) => venueFeature.feature.name).filter(Boolean) ?? [];
 
     return {
-      id: v.id,
-      title: v.title,
-      name: v.title,
-      address: v.address ? { city: v.address.city } : null,
+      id: venue.id,
+      title: venue.title,
+      name: venue.title,
+      address: venue.address ? { city: venue.address.city } : null,
       location: {
-        name: v.address?.city ?? null,
-        postalCode: v.address?.postalCode ?? null,
+        name: venue.address?.city ?? null,
+        postalCode: venue.address?.postalCode ?? null,
       },
       pricePerNight: price,
-      rating: v.rating ?? null,
-      capacity: v.capacity,
-      albumId: v.albumId ?? null,
+      rating: venue.rating ?? null,
+      capacity: venue.capacity,
+      albumId: venue.albumId ?? null,
       features: featureNames,
-      isFavourite: v.isFavourite ?? false,
+      isFavourite: venue.isFavourite ?? false,
     };
   }
 
-  private toDetailsDto(v: any) {
-    const card = this.toCardDto(v);
+  private toDetailsDto(venue: any) {
+    const card = this.toCardDto(venue);
     return {
       ...card,
-      venueId: v.id,
-      numberOfReviews: v.details?.numberOfReviews ?? 0,
-      description: v.description,
+      venueId: venue.id,
+      numberOfReviews: venue.details?.numberOfReviews ?? 0,
+      description: venue.description,
       sleepingDetails: {
-        maxCapacity: v.details?.sleepingMaxCapacity ?? null,
-        amountOfBeds: v.details?.sleepingBeds ?? null,
+        maxCapacity: venue.details?.sleepingMaxCapacity ?? null,
+        amountOfBeds: venue.details?.sleepingBeds ?? null,
       },
-      checkInHour: v.details?.checkInHour ?? null,
-      checkOutHour: v.details?.checkOutHour ?? null,
-      distanceFromCityCenterInKM: v.details?.distanceFromCityCenterInKM ?? null,
+      checkInHour: venue.details?.checkInHour ?? null,
+      checkOutHour: venue.details?.checkOutHour ?? null,
+      distanceFromCityCenterInKM: venue.details?.distanceFromCityCenterInKM ?? null,
       contactDetails: {
-        phone: v.details?.contactPhone ?? null,
-        email: v.details?.contactEmail ?? null,
+        phone: venue.details?.contactPhone ?? null,
+        email: venue.details?.contactEmail ?? null,
       },
     };
   }
@@ -63,32 +63,59 @@ export class VenuesService {
     perPage: number;
     priceMin?: number;
     priceMax?: number;
+    sortBy?: 'price' | 'rating' | 'capacity' | 'createdAt' | 'title';
+    sortDir?: 'asc' | 'desc';
+    features?: string[];
   }) {
-    const { city, page, perPage, priceMin, priceMax } = params;
+    const { city, page, perPage, priceMin, priceMax, sortBy, sortDir, features } = params;
 
-    const where: Prisma.VenueWhereInput = {};
+    const andWhere: Prisma.VenueWhereInput[] = [];
 
     const trimmedCity = city?.trim();
     if (trimmedCity) {
-      where.address = {
-        is: {
-          city: {
-            contains: trimmedCity,
-            mode: Prisma.QueryMode.insensitive,
+      andWhere.push({
+        address: {
+          is: {
+            city: { contains: trimmedCity, mode: Prisma.QueryMode.insensitive },
           },
         },
-      };
+      });
     }
 
     if (priceMin !== undefined || priceMax !== undefined) {
-      where.pricePerNight = {};
+      const priceFilter: Prisma.DecimalFilter = {};
       if (priceMin !== undefined) {
-        (where.pricePerNight as Prisma.DecimalFilter).gte = priceMin;
+        priceFilter.gte = priceMin;
       }
       if (priceMax !== undefined) {
-        (where.pricePerNight as Prisma.DecimalFilter).lte = priceMax;
+        priceFilter.lte = priceMax;
+      }
+      andWhere.push({ pricePerNight: priceFilter });
+    }
+
+    if (features && features.length) {
+      for (const name of features) {
+        andWhere.push({
+          venueFeatures: {
+            some: {
+              feature: {
+                name: { equals: name, mode: Prisma.QueryMode.insensitive },
+              },
+            },
+          },
+        });
       }
     }
+
+    const where: Prisma.VenueWhereInput = andWhere.length ? { AND: andWhere } : {};
+
+    const orderBy: Prisma.VenueOrderByWithRelationInput =
+      sortBy === 'price' ? { pricePerNight: sortDir ?? 'asc' } :
+        sortBy === 'rating' ? { rating: sortDir ?? 'desc' } :
+          sortBy === 'capacity' ? { capacity: sortDir ?? 'desc' } :
+            sortBy === 'title' ? { title: sortDir ?? 'asc' } :
+              sortBy === 'createdAt' ? { createdAt: sortDir ?? 'desc' } :
+                { createdAt: 'desc' };
 
     const [totalCount, rows] = await this.prisma.$transaction([
       this.prisma.venue.count({ where }),
@@ -98,7 +125,7 @@ export class VenuesService {
           address: { select: { city: true, country: true, street: true, postalCode: true } },
           venueFeatures: { select: { feature: { select: { name: true } } } },
         },
-        orderBy: { createdAt: 'desc' },
+        orderBy,
         skip: (page - 1) * perPage,
         take: perPage,
       }),
