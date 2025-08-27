@@ -25,7 +25,10 @@ export class VenuesController {
     @Query('features') featuresRaw?: string | string[],
     @Query('features[]') featuresBracket?: string[] | string,
     @Query('type') type?: 'studio' | 'apartment' | 'house' | 'villa',
-    ) {
+    @Query('startDate') startDate?: string,
+    @Query('endDate') endDate?: string,
+    @Req() req?: any,
+  ) {
     const pageNum = Math.max(1, parseInt(page ?? '1', 10) || 1);
     const perPageNum = Math.min(60, Math.max(1, parseInt(perPage ?? '12', 10) || 12));
 
@@ -54,6 +57,9 @@ export class VenuesController {
       sortDir,
       features,
       type,
+      startDate,
+      endDate,
+      currentUserId: req?.user?.id,
     });
   }
 

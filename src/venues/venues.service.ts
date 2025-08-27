@@ -5,12 +5,13 @@ import { CreateVenueDto } from './dto/create-venue.dto';
 import { Prisma } from '@prisma/client';
 
 type VenueType = 'studio' | 'apartment' | 'house' | 'villa';
+type AvailabilityStatus = 'available' | 'booked' | 'booked_by_me' | 'unknown';
 
 const TYPE_CAPACITY_RULES: Record<VenueType, { gte?: number; lte?: number }> = {
-  studio:     { lte: 2 },
-  apartment:  { lte: 3 },
-  house:      { gte: 4, lte: 8 },
-  villa:      { gte: 9 },
+  studio: { lte: 2 },
+  apartment: { lte: 3 },
+  house: { gte: 4, lte: 8 },
+  villa: { gte: 9 },
 };
 
 @Injectable()
@@ -76,8 +77,24 @@ export class VenuesService {
     sortDir?: 'asc' | 'desc';
     features?: string[];
     type?: VenueType;
+    startDate?: string;
+    endDate?: string;
+    currentUserId?: number;
   }) {
-    const { city, page, perPage, priceMin, priceMax, sortBy, sortDir, features, type } = params;
+    const {
+      city,
+      page,
+      perPage,
+      priceMin,
+      priceMax,
+      sortBy,
+      sortDir,
+      features,
+      type,
+      startDate,
+      endDate,
+      currentUserId,
+    } = params;
 
     const andWhere: Prisma.VenueWhereInput[] = [];
 
@@ -139,21 +156,54 @@ export class VenuesService {
               sortBy === 'createdAt' ? { createdAt: sortDir ?? 'desc' } :
                 { createdAt: 'desc' };
 
+    const hasRange = !!(startDate && endDate);
+    const overlapWhere: Prisma.BookingWhereInput | undefined = hasRange ? {
+      status: 'CONFIRMED',
+      AND: [
+        { startDate: { lt: new Date(endDate!) } }, // booking starts before selected end
+        { endDate: { gt: new Date(startDate!) } }, // booking ends after selected start
+      ],
+    } : undefined;
+
+    const include: Prisma.VenueInclude = {
+      address: { select: { city: true, country: true, street: true, postalCode: true } },
+      venueFeatures: { select: { feature: { select: { name: true } } } },
+      ...(overlapWhere
+        ? {
+          bookings: {
+            where: overlapWhere,
+            select: { id: true, userId: true },
+          },
+        }
+        : {}),
+    };
+
     const [totalCount, rows] = await this.prisma.$transaction([
       this.prisma.venue.count({ where }),
       this.prisma.venue.findMany({
         where,
-        include: {
-          address: { select: { city: true, country: true, street: true, postalCode: true } },
-          venueFeatures: { select: { feature: { select: { name: true } } } },
-        },
+        include,
         orderBy,
         skip: (page - 1) * perPage,
         take: perPage,
       }),
     ]);
 
-    const items = rows.map((v) => this.toCardDto(v));
+    const items = rows.map((v: any) => {
+      const base = this.toCardDto(v);
+
+      let availabilityStatus: AvailabilityStatus = 'unknown';
+      if (hasRange) {
+        const overlaps = v?.bookings?.length ?? 0;
+        const overlapMine = currentUserId
+          ? (v?.bookings ?? []).some((b: any) => b.userId === currentUserId)
+          : false;
+        availabilityStatus = overlaps === 0 ? 'available' : (overlapMine ? 'booked_by_me' : 'booked');
+      }
+
+      return { ...base, availabilityStatus };
+    });
+
     return { items, totalCount };
   }
 
