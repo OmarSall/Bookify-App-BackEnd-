@@ -27,6 +27,7 @@ export class VenuesController {
     @Query('type') type?: 'studio' | 'apartment' | 'house' | 'villa',
     @Query('startDate') startDate?: string,
     @Query('endDate') endDate?: string,
+    @Query('guests') guests?: string,
     @Req() req?: any,
   ) {
     const pageNum = Math.max(1, parseInt(page ?? '1', 10) || 1);
@@ -47,6 +48,8 @@ export class VenuesController {
 
     const features = featureList.length ? featureList : undefined;
 
+    const guestsNum = guests !== undefined ? (parseInt(guests, 10) || 0) : undefined;
+
     return this.venues.getList({
       city,
       page: pageNum,
@@ -59,6 +62,7 @@ export class VenuesController {
       type,
       startDate,
       endDate,
+      guests: Number.isFinite(guestsNum as any) && (guestsNum as number) > 0 ? (guestsNum as number) : undefined,
       currentUserId: req?.user?.id,
     });
   }

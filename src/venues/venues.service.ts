@@ -80,6 +80,7 @@ export class VenuesService {
     startDate?: string;
     endDate?: string;
     currentUserId?: number;
+    guests?: number;
   }) {
     const {
       city,
@@ -94,6 +95,7 @@ export class VenuesService {
       startDate,
       endDate,
       currentUserId,
+      guests,
     } = params;
 
     const andWhere: Prisma.VenueWhereInput[] = [];
@@ -134,15 +136,33 @@ export class VenuesService {
       }
     }
 
+    let capacityFilter: Prisma.IntFilter | null = null;
+
     if (type && TYPE_CAPACITY_RULES[type]) {
       const rule = TYPE_CAPACITY_RULES[type];
-      const capacityFilter: Prisma.IntFilter = {};
+      capacityFilter = {};
       if (rule.gte !== undefined) {
         capacityFilter.gte = rule.gte;
       }
       if (rule.lte !== undefined) {
         capacityFilter.lte = rule.lte;
       }
+    }
+
+    if (guests && guests > 0) {
+      capacityFilter = { equals: guests };
+    } else if (type && TYPE_CAPACITY_RULES[type]) {
+      const rule = TYPE_CAPACITY_RULES[type];
+      capacityFilter = {};
+      if (rule.gte !== undefined) {
+        capacityFilter.gte = rule.gte;
+      }
+      if (rule.lte !== undefined) {
+        capacityFilter.lte = rule.lte;
+      }
+    }
+
+    if (capacityFilter) {
       andWhere.push({ capacity: capacityFilter });
     }
 

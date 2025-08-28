@@ -24,9 +24,9 @@ export class AuthenticationController {
     return { id: user.id, email: user.email };
   }
 
+  @Post('log-in')
   @HttpCode(200)
   @Throttle({ default: { limit: 5, ttl: seconds(10) } })
-  @Post('log-in')
   @TransformPlainToInstance(AuthenticationResponseDto)
   async logIn(
     @Body() data: LogInDto,
@@ -38,14 +38,14 @@ export class AuthenticationController {
     return user;
   }
 
-  @HttpCode(204)
   @Post('log-out')
+  @HttpCode(204)
   async logOut(@Res({ passthrough: true }) res: Response) {
     res.setHeader('Set-Cookie', this.auth.getCookieForLogOut());
   }
 
-  @UseGuards(JwtAuthenticationGuard)
   @Get()
+  @UseGuards(JwtAuthenticationGuard)
   @TransformPlainToInstance(AuthenticationResponseDto)
   authenticate(@Req() req: RequestWithUser) {
     return req.user;
