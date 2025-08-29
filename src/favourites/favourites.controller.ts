@@ -17,7 +17,8 @@ export class FavouritesController {
     return this.service.listMyVenueIds(req.user.id);
   }
 
-  @Post(':venueId') add(@Param('venueId', ParseIntPipe) venueId: number, @Req() req: any) {
+  @Post(':venueId')
+  add(@Param('venueId', ParseIntPipe) venueId: number, @Req() req: any) {
     return this.service.add(req.user.id, venueId);
   }
 

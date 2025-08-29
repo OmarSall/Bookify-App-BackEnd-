@@ -72,8 +72,8 @@ export class VenuesController {
     return this.venues.getByIdWithDetails(id);
   }
 
-  @UseGuards(JwtAuthenticationGuard)
   @Post()
+  @UseGuards(JwtAuthenticationGuard)
   create(@Body() dto: CreateVenueDto, @Req() req: any) {
     const userId = req.user?.id ?? 1;
     return this.venues.createForHost(dto, userId);

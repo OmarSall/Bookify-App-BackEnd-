@@ -34,7 +34,9 @@ export class BookingsService {
   async create(userId: number, dto: CreateBookingDto) {
     const start = new Date(dto.startDate);
     const end = new Date(dto.endDate);
-    if (end <= start) throw new BadRequestException('endDate must be after startDate');
+    if (end <= start) {
+      throw new BadRequestException('endDate must be after startDate');
+    }
 
     const venue = await this.prisma.venue.findUnique({ where: { id: dto.venueId }, select: { pricePerNight: true } });
     if (!venue) {
@@ -67,17 +69,17 @@ export class BookingsService {
   }
 
   async updateDates(userId: number, id: number, dto: UpdateBookingDto) {
+    const start = new Date(dto.startDate);
+    const end = new Date(dto.endDate);
+    if (end <= start) {
+      throw new BadRequestException('endDate must be after startDate');
+    }
     const booking = await this.prisma.booking.findUnique({ where: { id } });
     if (!booking) {
       throw new NotFoundException();
     }
     if (booking.userId !== userId) {
       throw new ForbiddenException();
-    }
-    const start = new Date(dto.startDate);
-    const end = new Date(dto.endDate);
-    if (end <= start) {
-      throw new BadRequestException('endDate must be after startDate');
     }
 
     await this.ensureNoOverlap(booking.venueId, start, end, id);

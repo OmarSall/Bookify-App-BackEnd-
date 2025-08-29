@@ -9,7 +9,8 @@ import { JwtAuthenticationGuard } from '../authentication/jwt-authentication.gua
 export class BookingsController {
   constructor(private readonly service: BookingsService) {}
 
-  @Get('me') my(@Req() req: any) {
+  @Get('me')
+  my(@Req() req: any) {
     return this.service.findMine(req.user.id);
   }
 
