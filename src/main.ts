@@ -16,8 +16,13 @@ function resolveAllowedOrigins(config: ConfigService) {
     .map(o => normalizeOrigin(o.trim()))
     .filter(Boolean);
 
-  const defaults = ['http://localhost:5173', 'http://127.0.0.1:5173'];
-  return (parsed.length ? parsed : defaults).map(normalizeOrigin);
+  if (parsed.length === 0) {
+    throw new Error(
+      'FRONTEND_URL must be set in .env (comma-separated list of allowed origins)'
+    );
+  }
+
+  return parsed;
 }
 
 function createCorsOptions(allowed: string[]) {

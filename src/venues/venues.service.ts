@@ -2,69 +2,14 @@ import { Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../database/prisma.service';
 import slugify from 'slugify';
 import { CreateVenueDto } from './dto/create-venue.dto';
-import { Prisma } from '@prisma/client';
-
-type VenueType = 'studio' | 'apartment' | 'house' | 'villa';
-type AvailabilityStatus = 'available' | 'booked' | 'booked_by_me' | 'unknown';
-
-const TYPE_CAPACITY_RULES: Record<VenueType, { gte?: number; lte?: number }> = {
-  studio: { lte: 2 },
-  apartment: { lte: 3 },
-  house: { gte: 4, lte: 8 },
-  villa: { gte: 9 },
-};
+import { toCardDto, toDetailsDto } from "./venue.mappers";
+import { AvailabilityStatus, VenueType } from "./venue.types";
+import { buildWhere, buildOrderBy, buildOverlapWhere, buildInclude } from "./list-query.builder";
+import { computeAvailabilityStatus } from "./availability.util";
 
 @Injectable()
 export class VenuesService {
   constructor(private readonly prisma: PrismaService) {
-  }
-
-  private toCardDto(venue: any) {
-    const price =
-      typeof venue.pricePerNight === 'string'
-        ? Number(venue.pricePerNight)
-        : Number(venue.pricePerNight);
-
-    const featureNames: string[] =
-      venue.venueFeatures?.map((venueFeature: any) => venueFeature.feature.name).filter(Boolean) ?? [];
-
-    return {
-      id: venue.id,
-      title: venue.title,
-      name: venue.title,
-      address: venue.address ? { city: venue.address.city } : null,
-      location: {
-        name: venue.address?.city ?? null,
-        postalCode: venue.address?.postalCode ?? null,
-      },
-      pricePerNight: price,
-      rating: venue.rating ?? null,
-      capacity: venue.capacity,
-      albumId: venue.albumId ?? null,
-      features: featureNames,
-      isFavourite: venue.isFavourite ?? false,
-    };
-  }
-
-  private toDetailsDto(venue: any) {
-    const card = this.toCardDto(venue);
-    return {
-      ...card,
-      venueId: venue.id,
-      numberOfReviews: venue.details?.numberOfReviews ?? 0,
-      description: venue.description,
-      sleepingDetails: {
-        maxCapacity: venue.details?.sleepingMaxCapacity ?? null,
-        amountOfBeds: venue.details?.sleepingBeds ?? null,
-      },
-      checkInHour: venue.details?.checkInHour ?? null,
-      checkOutHour: venue.details?.checkOutHour ?? null,
-      distanceFromCityCenterInKM: venue.details?.distanceFromCityCenterInKM ?? null,
-      contactDetails: {
-        phone: venue.details?.contactPhone ?? null,
-        email: venue.details?.contactEmail ?? null,
-      },
-    };
   }
 
   async getList(params: {
@@ -83,120 +28,19 @@ export class VenuesService {
     guests?: number;
   }) {
     const {
-      city,
       page,
       perPage,
-      priceMin,
-      priceMax,
-      sortBy,
-      sortDir,
-      features,
-      type,
       startDate,
       endDate,
       currentUserId,
-      guests,
+      ...filters
     } = params;
 
-    const andWhere: Prisma.VenueWhereInput[] = [];
-
-    const trimmedCity = city?.trim();
-    if (trimmedCity) {
-      andWhere.push({
-        address: {
-          is: {
-            city: { contains: trimmedCity, mode: Prisma.QueryMode.insensitive },
-          },
-        },
-      });
-    }
-
-    if (priceMin !== undefined || priceMax !== undefined) {
-      const priceFilter: Prisma.DecimalFilter = {};
-      if (priceMin !== undefined) {
-        priceFilter.gte = priceMin;
-      }
-      if (priceMax !== undefined) {
-        priceFilter.lte = priceMax;
-      }
-      andWhere.push({ pricePerNight: priceFilter });
-    }
-
-    if (features && features.length) {
-      for (const name of features) {
-        andWhere.push({
-          venueFeatures: {
-            some: {
-              feature: {
-                name: { equals: name, mode: Prisma.QueryMode.insensitive },
-              },
-            },
-          },
-        });
-      }
-    }
-
-    let capacityFilter: Prisma.IntFilter | null = null;
-
-    if (type && TYPE_CAPACITY_RULES[type]) {
-      const rule = TYPE_CAPACITY_RULES[type];
-      capacityFilter = {};
-      if (rule.gte !== undefined) {
-        capacityFilter.gte = rule.gte;
-      }
-      if (rule.lte !== undefined) {
-        capacityFilter.lte = rule.lte;
-      }
-    }
-
-    if (guests && guests > 0) {
-      capacityFilter = { equals: guests };
-    } else if (type && TYPE_CAPACITY_RULES[type]) {
-      const rule = TYPE_CAPACITY_RULES[type];
-      capacityFilter = {};
-      if (rule.gte !== undefined) {
-        capacityFilter.gte = rule.gte;
-      }
-      if (rule.lte !== undefined) {
-        capacityFilter.lte = rule.lte;
-      }
-    }
-
-    if (capacityFilter) {
-      andWhere.push({ capacity: capacityFilter });
-    }
-
-    const where: Prisma.VenueWhereInput = andWhere.length ? { AND: andWhere } : {};
-
-    const orderBy: Prisma.VenueOrderByWithRelationInput =
-      sortBy === 'price' ? { pricePerNight: sortDir ?? 'asc' } :
-        sortBy === 'rating' ? { rating: sortDir ?? 'desc' } :
-          sortBy === 'capacity' ? { capacity: sortDir ?? 'desc' } :
-            sortBy === 'title' ? { title: sortDir ?? 'asc' } :
-              sortBy === 'createdAt' ? { createdAt: sortDir ?? 'desc' } :
-                { createdAt: 'desc' };
-
-    const hasRange = !!(startDate && endDate);
-    const overlapWhere: Prisma.BookingWhereInput | undefined = hasRange ? {
-      status: 'CONFIRMED',
-      AND: [
-        { startDate: { lt: new Date(endDate!) } }, // booking starts before selected end
-        { endDate: { gt: new Date(startDate!) } }, // booking ends after selected start
-      ],
-    } : undefined;
-
-    const include: Prisma.VenueInclude = {
-      address: { select: { city: true, country: true, street: true, postalCode: true } },
-      venueFeatures: { select: { feature: { select: { name: true } } } },
-      ...(overlapWhere
-        ? {
-          bookings: {
-            where: overlapWhere,
-            select: { id: true, userId: true },
-          },
-        }
-        : {}),
-    };
+    const where = buildWhere(filters);
+    const orderBy = buildOrderBy(filters.sortBy, filters.sortDir);
+    const overlapWhere = buildOverlapWhere(startDate, endDate);
+    const include = buildInclude(overlapWhere);
+    const hasRange = !!(startDate && endDate)
 
     const [totalCount, rows] = await this.prisma.$transaction([
       this.prisma.venue.count({ where }),
@@ -210,16 +54,12 @@ export class VenuesService {
     ]);
 
     const items = rows.map((v: any) => {
-      const base = this.toCardDto(v);
-
-      let availabilityStatus: AvailabilityStatus = 'unknown';
-      if (hasRange) {
-        const overlaps = v?.bookings?.length ?? 0;
-        const overlapMine = currentUserId
-          ? (v?.bookings ?? []).some((b: any) => b.userId === currentUserId)
-          : false;
-        availabilityStatus = overlaps === 0 ? 'available' : (overlapMine ? 'booked_by_me' : 'booked');
-      }
+      const base = toCardDto(v);
+      const availabilityStatus: AvailabilityStatus = computeAvailabilityStatus(
+        hasRange,
+        (v as any)?.bookings as Array<{ userId: number }> | undefined,
+        currentUserId
+      );
 
       return { ...base, availabilityStatus };
     });
@@ -239,7 +79,7 @@ export class VenuesService {
     if (!row) {
       throw new NotFoundException('Venue not found');
     }
-    return this.toDetailsDto(row);
+    return toDetailsDto(row);
   }
 
   async createForHost(dto: CreateVenueDto, hostId: number) {
@@ -294,9 +134,8 @@ export class VenuesService {
       },
     });
 
-    return this.toCardDto(created);
+    return toCardDto(created);
   }
-
 
   async getAllLocations(): Promise<string[]> {
     const venues = await this.prisma.venue.findMany({
@@ -310,5 +149,17 @@ export class VenuesService {
     );
 
     return Array.from(unique).sort((a, b) => a.localeCompare(b));
+  }
+
+  async getPriceRange() {
+    const agg = await this.prisma.venue.aggregate({
+      _min: { pricePerNight: true },
+      _max: { pricePerNight: true },
+    });
+
+    return {
+      minPrice: Number(agg._min.pricePerNight ?? 0),
+      maxPrice: Number(agg._max.pricePerNight ?? 0),
+    };
   }
 }

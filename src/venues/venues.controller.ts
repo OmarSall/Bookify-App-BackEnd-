@@ -67,6 +67,12 @@ export class VenuesController {
     });
   }
 
+  @Get('meta')
+  async getMeta() {
+    const price = await this.venues.getPriceRange();
+    return { priceRange: price }
+  }
+
   @Get(':id')
   findOne(@Param('id', ParseIntPipe) id: number) {
     return this.venues.getByIdWithDetails(id);
