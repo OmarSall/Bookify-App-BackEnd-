@@ -65,7 +65,7 @@ export function buildWhere(params: ListParams): Prisma.VenueWhereInput {
   let capacityFilter: Prisma.IntFilter | null = null;
 
   if (guests && guests > 0) {
-    capacityFilter = { equals: guests };
+    capacityFilter = { gte: guests };
   } else if (type && TYPE_CAPACITY_RULES[type]) {
     const rule = TYPE_CAPACITY_RULES[type];
     capacityFilter = {};
@@ -98,43 +98,56 @@ export function buildOrderBy(
     createdAt: { field: 'createdAt', defaultDir: 'desc' },
   };
 
-  if(!sortBy) {
-    return {createdAt: "desc"}
+  if (!sortBy) {
+    return { createdAt: 'desc' };
   }
 
   const { field, defaultDir } = sortConfig[sortBy];
-  return { [field]: sortDir ?? defaultDir }
+  return { [field]: sortDir ?? defaultDir };
 }
 
-  export function buildOverlapWhere(
-    startDate?: string,
-    endDate?: string,
-  ): Prisma.BookingWhereInput | undefined {
-    const hasRange = !!(startDate && endDate);
-    if (!hasRange) {
-      return undefined;
-    }
-
-    return {
-      status: 'CONFIRMED',
-      AND: [
-        { startDate: { lt: new Date(endDate!) } }, // booking starts before selected end
-        { endDate: { gt: new Date(startDate!) } }, // booking ends after selected start
-      ],
-    };
+export function buildOverlapWhere(
+  startDate?: string,
+  endDate?: string,
+): Prisma.BookingWhereInput | undefined {
+  const hasRange = !!(startDate && endDate);
+  if (!hasRange) {
+    return undefined;
   }
 
-  export function buildInclude(overlapWhere?: Prisma.BookingWhereInput): Prisma.VenueInclude {
-    return {
-      address: { select: { city: true, country: true, street: true, postalCode: true } },
-      venueFeatures: { select: { feature: { select: { name: true } } } },
-      ...(overlapWhere
+  return {
+    status: 'CONFIRMED',
+    AND: [
+      { startDate: { lt: new Date(endDate!) } }, // booking starts before selected end
+      { endDate: { gt: new Date(startDate!) } }, // booking ends after selected start
+    ],
+  };
+}
+
+export function buildInclude(
+  overlapWhere?: Prisma.BookingWhereInput,
+  currentUserId?: number,
+): Prisma.VenueInclude {
+  return {
+    address: { select: { city: true, country: true, street: true, postalCode: true } },
+    venueFeatures: { select: { feature: { select: { name: true } } } },
+    ...(overlapWhere
+      ? {
+        bookings: {
+          where: overlapWhere,
+          select: { id: true, userId: true },
+        },
+      }
+      : {}),
+    ...(currentUserId
         ? {
-          bookings: {
-            where: overlapWhere,
-            select: { id: true, userId: true },
+          favourites: {
+            where: { userId: currentUserId },
+            select: { id: true },
+            take: 1,
           },
         }
-        : {}),
-    };
-  }
+        : {}
+    ),
+  };
+}

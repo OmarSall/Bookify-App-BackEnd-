@@ -13,16 +13,22 @@ export class FavouritesController {
   }
 
   @Get('me/ids')
-  myIds(@Req() req: any) {
+  myIds(
+    @Req() req: any) {
     return this.service.listMyVenueIds(req.user.id);
   }
 
   @Post(':venueId')
-  add(@Param('venueId', ParseIntPipe) venueId: number, @Req() req: any) {
+  add(
+    @Param('venueId', ParseIntPipe) venueId: number,
+    @Req() req: any) {
     return this.service.add(req.user.id, venueId);
   }
 
-  @Delete(':venueId') remove(@Param('venueId', ParseIntPipe) venueId: number, @Req() req: any) {
+  @Delete(':venueId')
+  remove(
+    @Param('venueId', ParseIntPipe) venueId: number,
+    @Req() req: any) {
     return this.service.remove(req.user.id, venueId);
   }
 }

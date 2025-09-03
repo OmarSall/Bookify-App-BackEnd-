@@ -48,6 +48,8 @@ export class FavouritesService {
   }
 
   remove(userId: number, venueId: number) {
-    return this.prisma.favourite.delete({ where: { userId_venueId: { userId, venueId } } });
+    return this.prisma.favourite.deleteMany({
+      where: { userId, venueId },
+    });
   }
 }

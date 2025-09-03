@@ -39,7 +39,7 @@ export class VenuesService {
     const where = buildWhere(filters);
     const orderBy = buildOrderBy(filters.sortBy, filters.sortDir);
     const overlapWhere = buildOverlapWhere(startDate, endDate);
-    const include = buildInclude(overlapWhere);
+    const include = buildInclude(overlapWhere, currentUserId);
     const hasRange = !!(startDate && endDate)
 
     const [totalCount, rows] = await this.prisma.$transaction([
