@@ -1,0 +1,165 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+// Looking for ways to speed up your queries, or scale easily with your serverless or edge functions?
+// Try Prisma Accelerate: https://pris.ly/cli/accelerate-init
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id           Int         @id @default(autoincrement())
+  email        String      @unique @db.Citext
+  name         String
+  password     String
+  phoneNumber  String?
+  createdAt    DateTime    @default(now())
+  updatedAt    DateTime    @updatedAt
+  address      Address?
+  hostedVenues Venue[]     @relation("VenueHost")
+  favourites   Favourite[]
+  bookings     Booking[]
+
+  @@index([createdAt])
+}
+
+model Address {
+  userId    Int      @id
+  street    String
+  city      String
+  country   String   @db.Char(2)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+}
+
+model VenueAddress {
+  id         Int      @id @default(autoincrement())
+  street     String
+  city       String
+  country    String   @db.Char(2)
+  postalCode String?
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+  venue      Venue?
+}
+
+model Venue {
+  id            Int           @id @default(autoincrement())
+  title         String
+  slug          String        @unique
+  description   String
+  pricePerNight Decimal       @db.Decimal(10, 2)
+  capacity      Int
+  latitude      Float?
+  longitude     Float?
+  albumId       Int?
+  rating        Float?
+  address       VenueAddress? @relation(fields: [addressId], references: [id], onDelete: SetNull, onUpdate: Cascade)
+  addressId     Int?          @unique
+  host          User          @relation("VenueHost", fields: [hostId], references: [id])
+  hostId        Int
+
+  createdAt     DateTime        @default(now())
+  updatedAt     DateTime        @updatedAt
+  images        VenueImages[]
+  venueFeatures VenueFeatures[]
+  favouritedBy  Favourite[]
+  bookings      Booking[]
+  details       VenueDetails?
+
+  @@index([hostId])
+  @@index([pricePerNight])
+  @@index([capacity])
+}
+
+model VenueImages {
+  id        Int      @id @default(autoincrement())
+  venueId   Int
+  venue     Venue    @relation(fields: [venueId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+  url       String
+  alt       String?
+  position  Int?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([venueId])
+}
+
+model Feature {
+  id            Int             @id @default(autoincrement())
+  name          String          @unique @db.Citext
+  createdAt     DateTime        @default(now())
+  updatedAt     DateTime        @updatedAt
+  venueFeatures VenueFeatures[]
+}
+
+model VenueFeatures {
+  venueId   Int
+  featureId Int
+  createdAt DateTime @default(now())
+
+  venue   Venue   @relation(fields: [venueId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+  feature Feature @relation(fields: [featureId], references: [id], onDelete: Restrict, onUpdate: Cascade)
+
+  @@id([venueId, featureId])
+  @@index([featureId])
+}
+
+model Favourite {
+  userId    Int
+  venueId   Int
+  createdAt DateTime @default(now())
+
+  user  User  @relation(fields: [userId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+  venue Venue @relation(fields: [venueId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+
+  @@id([userId, venueId])
+  @@index([venueId])
+}
+
+model Booking {
+  id      Int   @id @default(autoincrement())
+  userId  Int?
+  venueId Int
+  user    User? @relation(fields: [userId], references: [id], onDelete: SetNull, onUpdate: Cascade)
+  venue   Venue @relation(fields: [venueId], references: [id], onDelete: Restrict, onUpdate: Cascade)
+
+  startDate  DateTime
+  endDate    DateTime
+  totalPrice Decimal       @db.Decimal(10, 2)
+  status     BookingStatus @default(CONFIRMED)
+
+  createdAt DateTime @default(now())
+
+  @@index([userId])
+  @@index([venueId])
+  @@index([venueId, startDate])
+}
+
+enum BookingStatus {
+  CONFIRMED
+  CANCELLED
+}
+
+model VenueDetails {
+  id                         Int     @id @default(autoincrement())
+  venueId                    Int     @unique
+  numberOfReviews            Int     @default(0)
+  checkInHour                String?
+  checkOutHour               String?
+  distanceFromCityCenterInKM Int?
+  sleepingMaxCapacity        Int?
+  sleepingBeds               Int?
+  contactEmail               String?
+  contactPhone               String?
+
+  venue Venue @relation(fields: [venueId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+}
